@@ -134,4 +134,4 @@ class FullRobustPCA:
         L_out = L_col.view(self.H, self.W, self.C).to(self.device).clip(0, 1)
         S_out = S_col.view(self.H, self.W, self.C).to(self.device).clip(0, 1)
         self.current_frame_idx += 1
-        return L_out, S_out * 4
+        return L_out, S_out

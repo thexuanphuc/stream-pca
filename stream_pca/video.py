@@ -1,4 +1,6 @@
 from .model import CompressiveModel
+from .model_online_dynamic import OnlineMovingWindowRPCA
+
 import cv2, numpy as np, torch
 
 
@@ -23,19 +25,32 @@ class VideoWrapper:
 
     def process(self, model: CompressiveModel):
         # 1. Warmup Model
-        frames = []
-        for _ in range(self.max_frame):
-            ret, f = self.cap.read()
-            if not ret:
-                break
-            frames.append(
-                cv2.cvtColor(cv2.resize(f, (self.width, self.h)), cv2.COLOR_BGR2RGB) # h, w, 3
-            )
-        model.init_basis(frames)
+        if model is OnlineMovingWindowRPCA:
+            burn_in_frames = []
+            for _ in range(model.n_burnin): # Read only the burn-in length
+                ret, f = self.cap.read()
+                if not ret: break
+                burn_in_frames.append(f) # TODO: preprocess
+            
+            model.init_basis(burn_in_frames)
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, model.n_burnin)
+            t = model.n_burnin
+        else: 
+            frames = []
+            for _ in range(self.max_frame):
+                ret, f = self.cap.read()
+                if not ret:
+                    break
+                frames.append(
+                    cv2.cvtColor(cv2.resize(f, (self.width, self.h)), cv2.COLOR_BGR2RGB) # h, w, 3
+                )
+                # print("the frame number frames", frames[-1].shape)
+            model.init_basis(frames)
+            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            t = 0
 
         # 2. Main Loop
-        self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-        t = 0
+        
         print(f"Processing {self.n_frames} frames...")
 
         while True:
@@ -56,10 +71,11 @@ class VideoWrapper:
 
             # Inference
             bg, fg = model(ten)
-
+            # print(fg)
+            # raise ValueError
             # Store (GPU -> CPU -> UInt8)
             self.L_store[t] = (bg.cpu().numpy() * 255).astype(np.uint8)
-            self.S_store[t] = (fg.cpu().numpy() * 255).astype(np.uint8)
+            self.S_store[t] = (fg.cpu().numpy() * 255).astype(np.uint8) * 4
 
             t += 1
             if t % 50 == 0:
