@@ -199,7 +199,8 @@ class OnlineMovingWindowRPCA:
 
         # 4. Return Result
         L_vec = (self.U @ v).view(H, W, C)
-        S_vec = s.view(H, W, C)
+        S_vec = (s.view(H, W, C).abs() - 0.01).relu()
+
         
         return L_vec.clip(0, 1), S_vec.clip(0, 1)
 
